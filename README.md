@@ -112,10 +112,11 @@ The generated Excel file contains multiple sheets depending on the mode:
 
 | Sheet | Description |
 |-------|-------------|
-| `Codebook` | Gene-to-readout assignments |
-| `Pattern` | Readout/adapter sequences per hybridization round and channel |
-| `Secondary_sequences` | Encoding probe sequences (5′ and 3′) |
-| `Ordering` | Padlock and priming sequences (RAEFISH only) |
+| `Sequence_Pattern` | Readout/adapter sequences per hybridization round and channel |
+| `Gene_Codebook` | Barcode per gene, containing either readout numnbers or bits |
+| `Encoding_Probes` | RAEFISH only. Encoding probe sequences (5′ and 3′) |
+| `Encoding_Probe_arms` | MERFISH only. Arms of encoding probes with landing sites for readout probes |
+| `Ordering` | RAEFISH only. Padlock, priming and encoding probe sequences |
 
 ## Project structure
 
@@ -123,7 +124,7 @@ The generated Excel file contains multiple sheets depending on the mode:
 ├── Codebook_Generator.py      # Web interface (Flask)
 ├── helper_functions.py        # Codebook generation logic
 ├── templates/index.html       # Web interface template
-├── doc/MOUSE_sequences.xlsx   # Primer, readout, and gene sequences
+├── doc/MOUSE_sequences.xlsx   # Primer, readout, target sequences and RAEFISH probes
 └── requirements.txt
 ```
 
