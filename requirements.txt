@@ -4,3 +4,4 @@ biopython
 flask
 werkzeug
 openpyxl
+tk
