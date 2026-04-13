@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sequential RNA FISH Codebook Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .form-section {
+            max-width: 500px;
+            margin: 0 auto 40px;
+            padding-bottom: 40px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        select, input[type="number"], input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        select:focus, input[type="number"]:focus, input[type="text"]:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+
+        .file-display {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        button.submit-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-top: 20px;
+        }
+
+        button.submit-btn:hover {
+            background-color: #5568d3;
+        }
+
+        button.submit-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: left;
+            font-weight: 500;
+            display: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 2px solid #f5c6cb;
+        }
+
+        .message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 2px solid #bee5eb;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .results-section {
+            display: none;
+            margin-top: 40px;
+        }
+
+        .sheet-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .sheet-tab {
+            padding: 10px 20px;
+            background-color: #f5f5f5;
+            border: 2px solid transparent;
+            border-radius: 5px 5px 0 0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            font-size: 13px;
+        }
+
+        .sheet-tab:hover {
+            background-color: #e0e0e0;
+        }
+
+        .sheet-tab.active {
+            background-color: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .sheet-content {
+            display: none;
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .sheet-content.active {
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        th {
+            background-color: #f5f5f5;
+            padding: 8px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+            position: sticky;
+            top: 0;
+            word-break: break-word;
+        }
+
+        td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #eee;
+            word-break: break-word;
+        }
+
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+
+        .file-button {
+            padding: 10px 16px;
+            background-color: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.3s;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .file-button:hover {
+            background-color: #5568d3;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            font-weight: normal;
+            margin-bottom: 8px;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sequential RNA FISH Codebook Generator</h1>
+        
+        <div class="form-section">
+            <form id="codebookForm">
+                <!-- MODE Selection -->
+                <div class="form-group">
+                    <label for="mode">Mode *</label>
+                    <select id="mode" required>
+                        <option value="">-- Select Mode --</option>
+                        <option value="MERFISH">MERFISH</option>
+                        <option value="RAEFISH">RAEFISH</option>
+                    </select>
+                </div>
+
+                <!-- BARCODE Type Selection -->
+                <div class="form-group">
+                    <label>Barcode Type *</label>
+                    <label class="checkbox-label">
+                        <input type="radio" name="barcodeType" value="combinatorial" checked>
+                        Combinatorial (readout combinations across channels)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="radio" name="barcodeType" value="binary">
+                        Binary (bit codes across imaging rounds, distributed over channels)
+                    </label>
+                    <p class="info-text">Combinatorial: uses combinations of readout numbers | Binary: uses 0/1 bits per imaging round</p>
+                </div>
+
+                <!-- MERFISH Gene Input Choice (only for MERFISH) -->
+                <div class="form-group hidden" id="geneInputChoiceGroup">
+                    <label>Gene Input Method *</label>
+                    <label class="checkbox-label">
+                        <input type="radio" name="geneInputMethod" value="list" checked>
+                        Upload gene list file
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="radio" name="geneInputMethod" value="count">
+                        Enter number of genes
+                    </label>
+                </div>
+
+                <!-- GENE_LIST_FILE (for MERFISH with list or RAEFISH) -->
+                <div class="form-group hidden" id="geneListGroup">
+                    <label for="geneListFile">Gene List File *</label>
+                    <input type="file" id="geneListFile" accept=".xlsx,.xls">
+                    <div id="geneListDisplay" class="file-display hidden"></div>
+                    <p class="info-text">Excel file with gene names (and optional expression values)</p>
+                </div>
+
+                <!-- GENES (for MERFISH with count) -->
+                <div class="form-group hidden" id="genesGroup">
+                    <label for="genes">Number of Genes</label>
+                    <input type="number" id="genes" min="1" value="1000">
+                    <p class="info-text">Generate synthetic gene names</p>
+                </div>
+
+                <!-- MERFISH Reverse Complement Choice (only for MERFISH) -->
+                <div class="form-group hidden" id="reverseComplementGroup">
+                    <label>Encoding Probe Processing *</label>
+                    <label class="checkbox-label">
+                        <input type="radio" name="reverseComplement" value="true" checked>
+                        Reverse complement readout sequences (for ProbeDealer)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="radio" name="reverseComplement" value="false">
+                        Leave readout sequences intact (for PaintSHOP)
+                    </label>
+                    <p class="info-text">Choose how to process the encoding probe sequences</p>
+                </div>
+
+                <!-- HYBRIDIZATIONS -->
+                <div class="form-group">
+                    <label for="hybridizations">Imaging rounds</label>
+                    <input type="number" id="hybridizations" min="1" value="8">
+                </div>
+
+                <!-- CHANNELS -->
+                <div class="form-group">
+                    <label for="channels">Channels</label>
+                    <input type="number" id="channels" min="1" value="3">
+                </div>
+
+                <!-- OPTIMIZE_BALANCE -->
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="optimizeBalance" checked>
+                        Make balanced codebook
+                    </label>
+                    <p class="info-text">When enabled: balances occurrence of each readout to minimize optical crowding<br/>When disabled: maximizes number of barcodes without optimization</p>
+                </div>
+
+                <!-- ENFORCE_PAIRWISE -->
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enforcePairwise" checked>
+                        Enforce pairwise uniqueness (strict mode)
+                    </label>
+                    <p class="info-text">When enabled: any two barcodes must have unique unions (stricter constraint)<br/>When disabled: only Hamming distance of 2 is required (more permissive)</p>
+                </div>
+
+                <!-- OUTPUT_FILE -->
+                <div class="form-group">
+                    <label for="outputPath">Output File Name *</label>
+                    <input type="text" id="outputPath" placeholder="e.g., Codebook_output.xlsx" value="Codebook_output.xlsx">
+                    <p class="info-text">Name of the file to save</p>
+                </div>
+
+                <!-- OUTPUT_FOLDER -->
+                <div class="form-group">
+                    <label>Output Folder *</label>
+                    <button type="button" class="file-button" onclick="selectOutputFolder()">
+                        Browse Folder
+                    </button>
+                    <div id="outputFolderDisplay" class="file-display hidden"></div>
+                    <p class="info-text">Select the folder where to save the codebook</p>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="submit-btn" id="submitBtn">Generate Codebook</button>
+            </form>
+
+            <!-- Messages -->
+            <div id="message" class="message"></div>
+
+            <!-- Loading Spinner -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Generating codebook... This may take a moment.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const modeSelect = document.getElementById('mode');
+        const geneInputChoiceGroup = document.getElementById('geneInputChoiceGroup');
+        const geneListGroup = document.getElementById('geneListGroup');
+        const genesGroup = document.getElementById('genesGroup');
+        const reverseComplementGroup = document.getElementById('reverseComplementGroup');
+        const geneListFile = document.getElementById('geneListFile');
+        const geneListDisplay = document.getElementById('geneListDisplay');
+        let statusCheckInterval = null;
+        let selectedOutputPath = null;
+
+        // Show/hide fields based on mode selection
+        modeSelect.addEventListener('change', function() {
+            if (this.value === 'MERFISH') {
+                geneInputChoiceGroup.classList.remove('hidden');
+                reverseComplementGroup.classList.remove('hidden');
+                updateGeneInputFields();
+            } else if (this.value === 'RAEFISH') {
+                geneInputChoiceGroup.classList.add('hidden');
+                reverseComplementGroup.classList.add('hidden');
+                geneListGroup.classList.remove('hidden');
+                genesGroup.classList.add('hidden');
+            } else {
+                geneInputChoiceGroup.classList.add('hidden');
+                reverseComplementGroup.classList.add('hidden');
+                geneListGroup.classList.add('hidden');
+                genesGroup.classList.add('hidden');
+            }
+        });
+
+        // Handle gene input method change (list vs count)
+        document.querySelectorAll('input[name="geneInputMethod"]').forEach(radio => {
+            radio.addEventListener('change', updateGeneInputFields);
+        });
+
+        function updateGeneInputFields() {
+            const method = document.querySelector('input[name="geneInputMethod"]:checked').value;
+            if (method === 'list') {
+                geneListGroup.classList.remove('hidden');
+                genesGroup.classList.add('hidden');
+            } else {
+                geneListGroup.classList.add('hidden');
+                genesGroup.classList.remove('hidden');
+            }
+        }
+
+        // Handle gene list file selection
+        geneListFile.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                const file = this.files[0];
+                geneListDisplay.textContent = `Selected: ${file.name}`;
+                geneListDisplay.classList.remove('hidden');
+            } else {
+                geneListDisplay.classList.add('hidden');
+            }
+        });
+
+        function showMessage(text, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+        }
+
+        function checkStatus() {
+            fetch('/api/check-status')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.processing && data.message) {
+                        clearInterval(statusCheckInterval);
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('submitBtn').disabled = false;
+                        
+                        if (data.message.includes('✓')) {
+                            showMessage(data.message + '\n\nFile saved to: ' + data.output_file, 'success');
+                        } else if (data.message.includes('✗')) {
+                            showMessage(data.message, 'error');
+                        } else {
+                            showMessage(data.message, 'info');
+                        }
+                    }
+                });
+        }
+
+        async function selectOutputFolder() {
+            try {
+                const response = await fetch('/api/select-output-folder', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.folder) {
+                    selectedOutputPath = data.folder;
+                    document.getElementById('outputFolderDisplay').textContent = `Selected: ${selectedOutputPath}`;
+                    document.getElementById('outputFolderDisplay').classList.remove('hidden');
+                } else {
+                    showMessage('Error: ' + (data.error || 'Could not select folder'), 'error');
+                    selectedOutputPath = null;
+                    document.getElementById('outputFolderDisplay').classList.add('hidden');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+                selectedOutputPath = null;
+            }
+        }
+
+        document.getElementById('codebookForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const mode = document.getElementById('mode').value;
+            const hybridizations = document.getElementById('hybridizations').value;
+            const channels = document.getElementById('channels').value;
+            const optimizeBalance = document.getElementById('optimizeBalance').checked;
+            const enforcePairwise = document.getElementById('enforcePairwise').checked;
+            const outputFileName = document.getElementById('outputPath').value;
+            const barcodeType = document.querySelector('input[name="barcodeType"]:checked').value;
+
+            if (!mode) {
+                showMessage('Please select a mode', 'error');
+                return;
+            }
+
+            // Validate MERFISH-specific inputs
+            let geneListPath = null;
+            let geneCount = null;
+            let reverseComplement = false;
+
+            if (mode === 'MERFISH') {
+                const geneInputMethod = document.querySelector('input[name="geneInputMethod"]:checked').value;
+                reverseComplement = document.querySelector('input[name="reverseComplement"]:checked').value === 'true';
+
+                if (geneInputMethod === 'list') {
+                    if (!geneListFile.files.length) {
+                        showMessage('Please select a gene list file', 'error');
+                        return;
+                    }
+                } else {
+                    geneCount = parseInt(document.getElementById('genes').value);
+                    if (isNaN(geneCount) || geneCount < 1) {
+                        showMessage('Please enter a valid number of genes', 'error');
+                        return;
+                    }
+                }
+            } else if (mode === 'RAEFISH') {
+                // RAEFISH always requires a gene list file
+                if (!geneListFile.files.length) {
+                    showMessage('Please select a gene list file', 'error');
+                    return;
+                }
+            }
+
+            if (!outputFileName) {
+                showMessage('Please enter an output file name', 'error');
+                return;
+            }
+
+            if (!selectedOutputPath) {
+                showMessage('Please select an output folder', 'error');
+                return;
+            }
+
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('message').style.display = 'none';
+
+            try {
+                // Upload gene list file if needed
+                if (mode === 'MERFISH' && document.querySelector('input[name="geneInputMethod"]:checked').value === 'list') {
+                    const formData = new FormData();
+                    formData.append('file', geneListFile.files[0]);
+                    
+                    const uploadRes = await fetch('/api/upload-gene-list', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const uploadData = await uploadRes.json();
+                    if (!uploadData.success) {
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('submitBtn').disabled = false;
+                        showMessage('Error uploading file: ' + uploadData.error, 'error');
+                        return;
+                    }
+                    geneListPath = uploadData.file_path;
+                } else if (mode === 'RAEFISH') {
+                    const formData = new FormData();
+                    formData.append('file', geneListFile.files[0]);
+                    
+                    const uploadRes = await fetch('/api/upload-gene-list', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const uploadData = await uploadRes.json();
+                    if (!uploadData.success) {
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('submitBtn').disabled = false;
+                        showMessage('Error uploading file: ' + uploadData.error, 'error');
+                        return;
+                    }
+                    geneListPath = uploadData.file_path;
+                }
+
+                // Use selected output folder path
+                let outputPath = selectedOutputPath + '\\' + outputFileName;
+
+                const response = await fetch('/api/generate-codebook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        mode,
+                        gene_count: geneCount,
+                        gene_list_file: geneListPath,
+                        hybridizations, 
+                        channels,
+                        output_file: outputPath,
+                        optimize_balance: optimizeBalance,
+                        enforce_pairwise: enforcePairwise,
+                        reverse_complement: reverseComplement,
+                        barcode_type: barcodeType
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('Codebook generation started. Please wait...', 'info');
+                    statusCheckInterval = setInterval(checkStatus, 500);
+                } else {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('submitBtn').disabled = false;
+                    showMessage(data.error || 'An error occurred', 'error');
+                }
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('submitBtn').disabled = false;
+                showMessage('Error: ' + error.message, 'error');
+            }
+        });
+    </script>
+</body>
+</html>
