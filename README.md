@@ -1,4 +1,4 @@
-# seqFISH Codebook Generator
+# Codebook Generator for imaging-based Spatial Transcriptomics
 
 A web-based tool for generating hybridization codebooks for sequential RNA FISH experiments (MERFISH and RAEFISH).
 
