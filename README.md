@@ -154,12 +154,12 @@ Generate hybridization codebook for your genes:
 
 **Option 1: Command Line (Advanced)**
 ```bash
-python C_Create_Codebook.py
+python helper_functions.py
 ```
 
 **Option 2: Web Interface (Recommended for Beginners)**
 ```bash
-python seqFISH_app.py
+python Codebook_Generator.py
 ```
 Then open your web browser and go to: http://localhost:5000
 
@@ -228,11 +228,11 @@ seqFISH/
 │   └── MOUSE_sequences.xlsx           # Mouse gene sequences and primers
 ├── A_Generate_readout_sequences_forBLAST.py
 ├── B_Filter_BLAST_results.py
-├── C_Create_Codebook.py
+├── helper_functions.py
 ├── D_NanoPyx_ChannelRegistration.ipynb
 ├── E_NanoPyx_DriftCorrection.ipynb
 ├── F_FISH_Quant_detection.py          # Main analysis script
-├── seqFISH_app.py                     # Web interface
+├── Codebook_Generator.py              # Web interface
 ├── requirements.txt
 ├── README.md
 ├── templates/                         # Web interface templates
