@@ -61,8 +61,8 @@ def load_raefish_readout_probes(file_path):
     df_readout_probes = pd.read_excel(file_path, sheet_name='RAEFISH_readout_probes', header=0)
     readout_probes = {}
     for idx, row in df_readout_probes.iterrows():
-        channel = int(row.iloc[1])
-        landing_sequence = row.iloc[2]
+        channel = int(row.iloc[0])
+        landing_sequence = row.iloc[1]
         readout_probes[channel] = landing_sequence
     return readout_probes
 
@@ -127,13 +127,94 @@ def load_gene_list(file_path):
     
     return genes, expressions
 
-def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS, READOUT_SEQUENCES_LIST, genes, gene_expressions, FIVE_PRIMER, THREE_PRIMER, OUTPUT_FILE, raefish_adapter_sequences=None, raefish_readout_probes=None, raefish_gene_mapping=None, readout_label="Readout", reverse_complement=False, optimize_balance=True, enforce_pairwise=True, barcode_type="combinatorial"):
+
+def _build_merfish_to_order_idt(mouse_sequences_file, pattern_df):
+    """Build To_order_IDT for MERFISH: primers + channel-prefixed readout probes."""
+    channel_prefixes = {1: '/5TYE665N/', 2: '/5Cy3/', 3: '/5Alex488N/'}
+    rows = []
+
+    # Primers from MERFISH_primers sheet (col 0 = name, col 2 = sequence)
+    df_primers = pd.read_excel(mouse_sequences_file, sheet_name='MERFISH_primers', header=0)
+    for _, row in df_primers.iterrows():
+        name = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+        seq = str(row.iloc[2]).strip() if pd.notna(row.iloc[2]) else ''
+        if name and seq and seq.lower() != 'nan':
+            rows.append({'Name': name, 'Sequence': seq})
+
+    # Readout probes: numbered, prefixed by channel
+    for i, (_, row) in enumerate(pattern_df.iterrows()):
+        channel = int(row['Channel'])
+        prefix = channel_prefixes.get(channel, '')
+        seq = str(row['Readout_sequence']).strip()
+        rows.append({'Name': f'Readout_{i + 1}', 'Sequence': f'{prefix}{seq}'})
+
+    return pd.DataFrame(rows, columns=['Name', 'Sequence'])
+
+
+def _build_raefish_to_order_twist(genes, encoding_probes_rc_list1, encoding_probes_rc_list2,
+                                   padlock_1_list, padlock_2_list, priming_1_list, priming_2_list):
+    """Build To_order_Twist for RAEFISH: all probes flattened to one row per probe."""
+    import math
+    probe_entries = [
+        ('Encoding_probe1_RC', encoding_probes_rc_list1),
+        ('Encoding_probe2_RC', encoding_probes_rc_list2),
+        ('Padlock_1', padlock_1_list),
+        ('Padlock_2', padlock_2_list),
+        ('Priming_1', priming_1_list),
+        ('Priming_2', priming_2_list),
+    ]
+    rows = []
+    for probe_type, probe_list in probe_entries:
+        for gene, seq in zip(genes, probe_list):
+            if seq is not None and not (isinstance(seq, float) and math.isnan(seq)):
+                rows.append({'Name': f'{gene}_{probe_type}', 'Sequence': str(seq)})
+    return pd.DataFrame(rows, columns=['Name', 'Sequence'])
+
+
+def _build_raefish_to_order_idt(mouse_sequences_file, pattern_df_raefish):
+    """Build To_order_IDT for RAEFISH: primers + adapter probes + readout/blocking oligos."""
+    import math
+    rows = []
+
+    # Primers from RAEFISH_primers: combine col 0 and col 1 for name, col 2 for sequence
+    df_primers = pd.read_excel(mouse_sequences_file, sheet_name='RAEFISH_primers', header=0)
+    for _, row in df_primers.iterrows():
+        col0 = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+        col1 = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ''
+        name = f'{col0} {col1}'.strip()
+        seq = str(row.iloc[2]).strip() if pd.notna(row.iloc[2]) else ''
+        if name and seq and seq.lower() != 'nan':
+            rows.append({'Name': name, 'Sequence': seq})
+
+    # Adapter probes from Sequence_Pattern
+    if 'Adapter_probe' in pattern_df_raefish.columns:
+        for i, (_, row) in enumerate(pattern_df_raefish.iterrows()):
+            probe = row['Adapter_probe']
+            if probe is not None and not (isinstance(probe, float) and math.isnan(probe)):
+                rows.append({'Name': f'Adapter_probe_{i + 1}', 'Sequence': str(probe)})
+
+    # Readout probes and blocking oligos from RAEFISH_readout_probes
+    # col 0 (Channel) = channel number, col 1 (Readout_probes) = sequence, col 3 (Blocking_oligos) = sequence
+    df_readout = pd.read_excel(mouse_sequences_file, sheet_name='RAEFISH_readout_probes', header=0)
+    for _, row in df_readout.iterrows():
+        channel = row.iloc[0]
+        val = row.iloc[1]
+        if val is not None and not (isinstance(val, float) and math.isnan(val)) and str(val).strip():
+            rows.append({'Name': f'Readout_Ch{int(channel)}', 'Sequence': str(val).strip()})
+        blocking = row.iloc[3]
+        if blocking is not None and not (isinstance(blocking, float) and math.isnan(blocking)) and str(blocking).strip():
+            rows.append({'Name': f'Blocking_oligo_Ch{int(channel)}', 'Sequence': str(blocking).strip()})
+
+    return pd.DataFrame(rows, columns=['Name', 'Sequence'])
+
+
+def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS, READOUT_SEQUENCES_LIST, genes, gene_expressions, FIVE_PRIMER, THREE_PRIMER, OUTPUT_FILE, raefish_adapter_sequences=None, raefish_readout_probes=None, raefish_gene_mapping=None, readout_label="Readout", reverse_complement=False, optimize_balance=True, enforce_pairwise=True, barcode_type="combinatorial", mouse_sequences_file=None):
     """Generate hybridization codebook and save to Excel
     
     Parameters:
     -----------
     reverse_complement : bool, default=False
-        If True, applies reverse complement to five_sec_seq and three_sec_seq (for ProbeDealer).
+        If True, applies reverse complement to five_sec_seq and three_sec_seq.
         If False, leaves sequences intact (for PaintSHOP).
         Only applicable for MERFISH mode.
     
@@ -151,6 +232,7 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
         - "combinatorial": Barcodes as combinations of readout numbers (current behavior)
         - "binary": Barcodes as binary bit codes (0s and 1s), one bit per imaging round
     """
+    mouse_seq_file = mouse_sequences_file if mouse_sequences_file is not None else get_mouse_sequences_file()
     strings = READOUT_SEQUENCES_LIST
     max_rows = len(strings)
 
@@ -662,10 +744,12 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
                 '3_sec_sequences': three_sec_seq
             })
             
+            to_order_idt_df = _build_merfish_to_order_idt(mouse_seq_file, pattern_df)
             with pd.ExcelWriter(OUTPUT_FILE) as writer:
                 pattern_df.to_excel(writer, sheet_name='Sequence_Pattern', index=False)
                 binary_codebook_df.to_excel(writer, sheet_name='Gene_Codebook', index=False)
                 sec_sequences_df.to_excel(writer, sheet_name='Encoding_probe_arms', index=False)
+                to_order_idt_df.to_excel(writer, sheet_name='To_order_IDT', index=False)
         
         elif MODE == "RAEFISH":
             print(f"Generating RAEFISH binary codebook with {len(genes)} genes, {CHANNELS} channels, and {HYBRIDIZATIONS} imaging rounds")
@@ -764,30 +848,29 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
                     priming_1_list.append(None)
                     priming_2_list.append(None)
             
-            encoding_probes_df = pd.DataFrame({
-                'Gene': genes,
-                'Encoding_probe1': encoding_probe1_list,
-                'Encoding_probe2': encoding_probe2_list
-            })
-            
             encoding_probes_rc_list1 = [str(Seq(probe).reverse_complement()) if probe else None for probe in encoding_probe1_list]
             encoding_probes_rc_list2 = [str(Seq(probe).reverse_complement()) if probe else None for probe in encoding_probe2_list]
-            
-            ordering_probes_df = pd.DataFrame({
+
+            primary_probes_df = pd.DataFrame({
                 'Gene': genes,
-                'Encoding_probe1_RC': encoding_probes_rc_list1,
-                'Encoding_probe2_RC': encoding_probes_rc_list2,
+                'Encoding_probe1': encoding_probe1_list,
+                'Encoding_probe2': encoding_probe2_list,
                 'Padlock_1': padlock_1_list,
                 'Padlock_2': padlock_2_list,
                 'Priming_1': priming_1_list,
                 'Priming_2': priming_2_list
             })
-            
+            to_order_twist_df = _build_raefish_to_order_twist(
+                genes, encoding_probes_rc_list1, encoding_probes_rc_list2,
+                padlock_1_list, padlock_2_list, priming_1_list, priming_2_list)
+            to_order_idt_df = _build_raefish_to_order_idt(mouse_seq_file, pattern_df_binary)
+
             with pd.ExcelWriter(OUTPUT_FILE) as writer:
                 pattern_df_binary.to_excel(writer, sheet_name='Sequence_Pattern', index=False)
                 binary_codebook_df.to_excel(writer, sheet_name='Gene_Codebook', index=False)
-                encoding_probes_df.to_excel(writer, sheet_name='Encoding_Probes', index=False)
-                ordering_probes_df.to_excel(writer, sheet_name='Ordering_probes', index=False)
+                primary_probes_df.to_excel(writer, sheet_name='Primary_Probes', index=False)
+                to_order_twist_df.to_excel(writer, sheet_name='To_order_Twist', index=False)
+                to_order_idt_df.to_excel(writer, sheet_name='To_order_IDT', index=False)
         
         print(f"\nBinary codebook generation complete for {MODE} mode")
         print(f"Output saved to {OUTPUT_FILE}")
@@ -813,7 +896,7 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
             'Channel': col2,
             'Readout': col3
         })
-    else:  # PROBEDEALER or MERFISH
+    else:  # MERFISH
         pattern_df = pd.DataFrame({
             'Readout_number': range(1, min_sec_seq + 1),
             'Readout_sequence': strings[:min_sec_seq],
@@ -828,7 +911,7 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
     # Determine the sequence column name based on mode
     if MODE == "RAEFISH":
         sequence_column = 'Adapter_sequence'
-    else:  # PROBEDEALER or MERFISH
+    else:  # MERFISH
         sequence_column = 'Readout_sequence'
 
     for row_codebook in range(len(codebook_df)):
@@ -882,10 +965,12 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
         codebook_output.insert(0, 'Gene', genes)
 
         # Write to Excel
+        to_order_idt_df = _build_merfish_to_order_idt(mouse_seq_file, pattern_df)
         with pd.ExcelWriter(OUTPUT_FILE) as writer:
             pattern_df.to_excel(writer, sheet_name='Sequence_Pattern', index=False)
             codebook_output.to_excel(writer, sheet_name='Gene_Codebook', index=False)
             sec_sequences_df.to_excel(writer, sheet_name='Encoding_probe_arms', index=False)
+            to_order_idt_df.to_excel(writer, sheet_name='To_order_IDT', index=False)
 
     elif MODE == "RAEFISH":
         # Create adapter probes for RAEFISH
@@ -947,25 +1032,23 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
                 priming_1_list.append(None)
                 priming_2_list.append(None)
 
-        encoding_probes_df = pd.DataFrame({
-            'Gene': genes,
-            'Encoding_probe1': encoding_probe1_list,
-            'Encoding_probe2': encoding_probe2_list
-        })
-
         # Create reverse complement dataframe for ordering
         encoding_probes_rc_list1 = [str(Seq(probe).reverse_complement()) if probe else None for probe in encoding_probe1_list]
         encoding_probes_rc_list2 = [str(Seq(probe).reverse_complement()) if probe else None for probe in encoding_probe2_list]
-        
-        ordering_probes_df = pd.DataFrame({
+
+        primary_probes_df = pd.DataFrame({
             'Gene': genes,
-            'Encoding_probe1_RC': encoding_probes_rc_list1,
-            'Encoding_probe2_RC': encoding_probes_rc_list2,
+            'Encoding_probe1': encoding_probe1_list,
+            'Encoding_probe2': encoding_probe2_list,
             'Padlock_1': padlock_1_list,
             'Padlock_2': padlock_2_list,
             'Priming_1': priming_1_list,
             'Priming_2': priming_2_list
         })
+        to_order_twist_df = _build_raefish_to_order_twist(
+            genes, encoding_probes_rc_list1, encoding_probes_rc_list2,
+            padlock_1_list, padlock_2_list, priming_1_list, priming_2_list)
+        to_order_idt_df = _build_raefish_to_order_idt(mouse_seq_file, pattern_df_raefish)
 
         # Create output with gene names
         codebook_output = codebook_df.copy()
@@ -975,8 +1058,9 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
         with pd.ExcelWriter(OUTPUT_FILE) as writer:
             pattern_df_raefish.to_excel(writer, sheet_name='Sequence_Pattern', index=False)
             codebook_output.to_excel(writer, sheet_name='Gene_Codebook', index=False)
-            encoding_probes_df.to_excel(writer, sheet_name='Encoding_Probes', index=False)
-            ordering_probes_df.to_excel(writer, sheet_name='Ordering_probes', index=False)
+            primary_probes_df.to_excel(writer, sheet_name='Primary_Probes', index=False)
+            to_order_twist_df.to_excel(writer, sheet_name='To_order_Twist', index=False)
+            to_order_idt_df.to_excel(writer, sheet_name='To_order_IDT', index=False)
 
     print(f"\nCodebook generation complete for {MODE} mode")
     print(f"Output saved to {OUTPUT_FILE}")
@@ -986,8 +1070,8 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
 # IMPORTANT: Only run the codebook generation if this script is run directly, not when imported
 if __name__ == "__main__":
     # Validate mode
-    if MODE not in ["PROBEDEALER", "MERFISH", "RAEFISH"]:
-        raise ValueError(f"MODE must be 'PROBEDEALER', 'MERFISH', or 'RAEFISH', not '{MODE}'")
+    if MODE not in ["MERFISH", "RAEFISH"]:
+        raise ValueError(f"MODE must be 'MERFISH' or 'RAEFISH', not '{MODE}'")
 
     # Load primers and readout sequences
     MOUSE_SEQUENCES_FILE = get_mouse_sequences_file()
@@ -999,13 +1083,7 @@ if __name__ == "__main__":
     raefish_readout_probes = None
     raefish_gene_mapping = None
 
-    if MODE == "PROBEDEALER":
-        print(f"Using PROBEDEALER mode with {GENES} genes")
-        FIVE_PRIMER, THREE_PRIMER = load_primers_from_file(MOUSE_SEQUENCES_FILE, primer_type='MERFISH')
-        READOUT_SEQUENCES_LIST = load_readout_sequences_from_file(MOUSE_SEQUENCES_FILE, sheet_name='MERFISH_readout_sequences')
-        genes = [f"Gene_{i+1}" for i in range(GENES)]
-        gene_expressions = [1.0] * GENES
-    elif MODE == "MERFISH":
+    if MODE == "MERFISH":
         if GENE_LIST_FILE is None:
             raise ValueError("GENE_LIST_FILE must be specified for MERFISH mode")
         FIVE_PRIMER, THREE_PRIMER = load_primers_from_file(MOUSE_SEQUENCES_FILE, primer_type='MERFISH')

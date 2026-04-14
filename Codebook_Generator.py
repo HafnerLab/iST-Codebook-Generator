@@ -1,5 +1,7 @@
 import sys
 import os
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 from flask import Flask, render_template, request, jsonify
 from pathlib import Path
 import threading
@@ -253,7 +255,7 @@ def generate_codebook():
                             genes_list, gene_expressions = load_gene_list(gene_list_file)
                             print(f"Successfully loaded {len(genes_list)} genes from gene list file")
                         
-                        generate_hybridization_codebook(mode, len(genes_list), READS, hybridizations, channels, readout_sequences_list, genes_list, gene_expressions, five_primer, three_primer, output_file, reverse_complement=reverse_complement, optimize_balance=data.get('optimize_balance', True), enforce_pairwise=data.get('enforce_pairwise', True), barcode_type=barcode_type)
+                        generate_hybridization_codebook(mode, len(genes_list), READS, hybridizations, channels, readout_sequences_list, genes_list, gene_expressions, five_primer, three_primer, output_file, reverse_complement=reverse_complement, optimize_balance=data.get('optimize_balance', True), enforce_pairwise=data.get('enforce_pairwise', True), barcode_type=barcode_type, mouse_sequences_file=mouse_sequences_file)
                         
                     else:  # RAEFISH
                         print("Loading RAEFISH mode...")
@@ -264,7 +266,7 @@ def generate_codebook():
                         adapter_sequences_list = [str(Seq(seq).reverse_complement()) for seq in adapter_seqs]
                         raefish_probes = load_raefish_readout_probes(mouse_sequences_file)
                         raefish_gene_mapping = load_raefish_sequences(mouse_sequences_file)
-                        generate_hybridization_codebook(mode, len(genes_list), READS, hybridizations, channels, adapter_sequences_list, genes_list, gene_expressions, five_primer, three_primer, output_file, adapter_seqs, raefish_probes, raefish_gene_mapping, readout_label="Adapter", optimize_balance=data.get('optimize_balance', True), enforce_pairwise=data.get('enforce_pairwise', True), barcode_type=barcode_type)
+                        generate_hybridization_codebook(mode, len(genes_list), READS, hybridizations, channels, adapter_sequences_list, genes_list, gene_expressions, five_primer, three_primer, output_file, adapter_seqs, raefish_probes, raefish_gene_mapping, readout_label="Adapter", optimize_balance=data.get('optimize_balance', True), enforce_pairwise=data.get('enforce_pairwise', True), barcode_type=barcode_type, mouse_sequences_file=mouse_sequences_file)
                 
                 output_text = output_buffer.getvalue()
                 current_state['last_message'] = output_text

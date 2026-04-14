@@ -14,21 +14,21 @@ Click the green **Code** button on GitHub and select **Download ZIP**. Extract t
 
 Or clone with Git (requires [Git](https://git-scm.com/download)):
 ```bash
-git clone https://github.com/HafnerLab/seqFISH.git
+git clone https://github.com/HafnerLab/iST-Codebook-Generator.git
 ```
 
 Or download and extract via the command line without Git:
 
 *Windows (PowerShell):*
 ```powershell
-Invoke-WebRequest -Uri https://github.com/HafnerLab/seqFISH/archive/refs/heads/main.zip -OutFile seqFISH.zip
-Expand-Archive seqFISH.zip -DestinationPath .
+Invoke-WebRequest -Uri https://github.com/HafnerLab/iST-Codebook-Generator/archive/refs/heads/main.zip -OutFile iST-Codebook-Generator.zip
+Expand-Archive iST-Codebook-Generator.zip -DestinationPath .
 ```
 
 *macOS / Linux:*
 ```bash
-curl -L https://github.com/HafnerLab/seqFISH/archive/refs/heads/main.zip -o seqFISH.zip
-unzip seqFISH.zip
+curl -L https://github.com/HafnerLab/iST-Codebook-Generator/archive/refs/heads/main.zip -o iST-Codebook-Generator.zip
+unzip iST-Codebook-Generator.zip
 ```
 
 **2. Open the Miniconda terminal**
@@ -108,15 +108,26 @@ Enter a file name for the output (e.g., `Codebook_output.xlsx`) and select the f
 
 ## Output file
 
-The generated Excel file contains multiple sheets depending on the mode:
+The generated Excel file contains the following sheets:
+
+**MERFISH:**
 
 | Sheet | Description |
 |-------|-------------|
-| `Sequence_Pattern` | Readout/adapter sequences per hybridization round and channel |
-| `Gene_Codebook` | Barcode per gene, containing either readout numnbers or bits |
-| `Encoding_Probes` | RAEFISH only. Encoding probe sequences (5′ and 3′) |
-| `Encoding_Probe_arms` | MERFISH only. Arms of encoding probes with landing sites for readout probes |
-| `Ordering` | RAEFISH only. Padlock, priming and encoding probe sequences |
+| `Sequence_Pattern` | Readout sequences per hybridization round and channel |
+| `Gene_Codebook` | Barcode (readout numbers or bits) per gene |
+| `Encoding_probe_arms` | 5′ and 3′ arms of encoding probes |
+| `To_order_IDT` | Order-ready list: MERFISH primers + channel-prefixed readout probes |
+
+**RAEFISH:**
+
+| Sheet | Description |
+|-------|-------------|
+| `Sequence_Pattern` | Adapter sequences and adapter probes per hybridization round and channel |
+| `Gene_Codebook` | Barcode (adapter numbers or bits) per gene |
+| `Primary_Probes` | Encoding probes (5′/3′ arms) + padlock and priming sequences |
+| `To_order_Twist` | Flat list of all probes for ordering from Twist Biosciences |
+| `To_order_IDT` | Order-ready list: RAEFISH primers + adapter probes + readout/blocking oligos |
 
 ## Project structure
 
