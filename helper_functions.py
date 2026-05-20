@@ -506,87 +506,153 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
         per_channel_barcodes = {}
         per_channel_assignments = {}
         
-        for channel in range(CHANNELS):
-            num_genes_in_channel = genes_per_channel[channel]
-            channel_expressions = gene_expressions_per_channel[channel]
-            
-            if num_genes_in_channel == 0:
-                continue
-            
+        def _run_selection_for_channel(num_genes_in_channel, channel_expressions, pairwise_enforced):
+            """Run one selection attempt for a channel; returns selected_codes or None on failure.
+
+            Uses its own pairwise check so it never mutates the outer enforce_pairwise variable.
+            """
             shuffled_codes = all_possible_codes.copy()
             random.shuffle(shuffled_codes)
-            
+
             selected_codes = []
-            pair_set = set()  # always initialised; only used when enforce_pairwise=True
-            
+            pair_set = set()
+
+            def _pairwise_ok(code, sel_codes, p_set):
+                if not pairwise_enforced:
+                    return True
+                code_pos = active_positions(code)
+                seen_unions = set()
+                for existing in sel_codes:
+                    pair_union = frozenset(code_pos | active_positions(existing))
+                    if pair_union in p_set:
+                        return False
+                    if pair_union in seen_unions:
+                        return False
+                    seen_unions.add(pair_union)
+                return True
+
+            def _register_pairs(code, sel_codes, p_set):
+                if pairwise_enforced:
+                    code_pos = active_positions(code)
+                    for existing in sel_codes:
+                        p_set.add(frozenset(code_pos | active_positions(existing)))
+
             if use_expression_balancing:
                 bit_expressions = [[] for _ in range(HYBRIDIZATIONS)]
-                
+
                 for gene_pos in range(num_genes_in_channel):
                     gene_expr = channel_expressions[gene_pos] if gene_pos < len(channel_expressions) else 1.0
                     best_code = None
                     best_balance_score = float('inf')
-                    
+
                     for code in shuffled_codes:
                         if code in selected_codes:
                             continue
-                        if not pairwise_ok(code, selected_codes, pair_set):
+                        if not _pairwise_ok(code, selected_codes, pair_set):
                             continue
-                        
+
                         # Evaluate balance if this code were added
                         temp_bit_expressions = [list(be) for be in bit_expressions]
                         for bit_pos, bit in enumerate(code):
                             if bit == 1:
                                 temp_bit_expressions[bit_pos].append(gene_expr)
-                        
+
                         avg_expressions = [np.mean(be) if be else 0.0 for be in temp_bit_expressions]
                         balance_score = np.std(avg_expressions)
-                        
+
                         if balance_score < best_balance_score:
                             best_balance_score = balance_score
                             best_code = code
-                    
-                    if best_code:
-                        selected_codes.append(best_code)
-                        register_pairs(best_code, selected_codes, pair_set)
-                        for bit_pos, bit in enumerate(best_code):
-                            if bit == 1:
-                                bit_expressions[bit_pos].append(gene_expr)
+
+                    if best_code is None:
+                        return None  # failed to place this gene
+                    selected_codes.append(best_code)
+                    _register_pairs(best_code, selected_codes, pair_set)
+                    for bit_pos, bit in enumerate(best_code):
+                        if bit == 1:
+                            bit_expressions[bit_pos].append(gene_expr)
             else:
                 bit_frequencies = [0] * HYBRIDIZATIONS
-                
+
                 for gene_pos in range(num_genes_in_channel):
                     best_code = None
                     best_frequency_balance = float('inf')
-                    
+
                     for code in shuffled_codes:
                         if code in selected_codes:
                             continue
-                        if not pairwise_ok(code, selected_codes, pair_set):
+                        if not _pairwise_ok(code, selected_codes, pair_set):
                             continue
-                        
+
                         temp_frequencies = bit_frequencies.copy()
                         for bit_pos, bit in enumerate(code):
                             if bit == 1:
                                 temp_frequencies[bit_pos] += 1
-                        
+
                         balance_score = np.std(temp_frequencies)
-                        
+
                         if balance_score < best_frequency_balance:
                             best_frequency_balance = balance_score
                             best_code = code
-                    
-                    if best_code:
-                        selected_codes.append(best_code)
-                        register_pairs(best_code, selected_codes, pair_set)
-                        for bit_pos, bit in enumerate(best_code):
-                            if bit == 1:
-                                bit_frequencies[bit_pos] += 1
-            
+
+                    if best_code is None:
+                        return None  # failed to place this gene
+                    selected_codes.append(best_code)
+                    _register_pairs(best_code, selected_codes, pair_set)
+                    for bit_pos, bit in enumerate(best_code):
+                        if bit == 1:
+                            bit_frequencies[bit_pos] += 1
+
+            return selected_codes
+
+        MAX_RETRIES = 10
+
+        for channel in range(CHANNELS):
+            num_genes_in_channel = genes_per_channel[channel]
+            channel_expressions = gene_expressions_per_channel[channel]
+
+            if num_genes_in_channel == 0:
+                continue
+
+            selected_codes = None
+
+            # Try up to MAX_RETRIES times with different random shuffles
+            for attempt in range(MAX_RETRIES):
+                selected_codes = _run_selection_for_channel(
+                    num_genes_in_channel, channel_expressions, pairwise_enforced=enforce_pairwise
+                )
+                if selected_codes is not None and len(selected_codes) == num_genes_in_channel:
+                    break
+                selected_codes = None
+
+            # If still failing and pairwise was enabled, retry with relaxed constraints
+            if selected_codes is None and enforce_pairwise:
+                print(f"  Warning: Could not satisfy pairwise uniqueness for channel {channel + 1} "
+                      f"after {MAX_RETRIES} attempts. Retrying with relaxed pairwise constraints...")
+                for attempt in range(MAX_RETRIES):
+                    selected_codes = _run_selection_for_channel(
+                        num_genes_in_channel, channel_expressions, pairwise_enforced=False
+                    )
+                    if selected_codes is not None and len(selected_codes) == num_genes_in_channel:
+                        print(f"  Warning: Channel {channel + 1} codebook generated without pairwise "
+                              f"uniqueness enforcement.")
+                        break
+                    selected_codes = None
+
+            if selected_codes is None or len(selected_codes) != num_genes_in_channel:
+                assigned = len(selected_codes) if selected_codes else 0
+                raise ValueError(
+                    f"Binary barcode generation failed for channel {channel + 1}: "
+                    f"could only assign {assigned} barcodes to {num_genes_in_channel} genes. "
+                    f"Unable to find a valid assignment after {MAX_RETRIES} attempts with {HYBRIDIZATIONS} imaging rounds "
+                    f"and exactly {READS} ones to satisfy all constraints. "
+                    f"Try increasing the number of imaging rounds or reducing the number of genes."
+                )
+
             # Convert back to lists for downstream compatibility
             per_channel_barcodes[channel] = [list(c) for c in selected_codes]
             per_channel_assignments[channel] = {'genes_count': num_genes_in_channel}
-            
+
             print(f"\nChannel {channel + 1} - {num_genes_in_channel} genes:")
             for pos in range(HYBRIDIZATIONS):
                 freq = sum(1 for code in selected_codes if code[pos] == 1)
