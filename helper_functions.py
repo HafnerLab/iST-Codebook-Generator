@@ -644,7 +644,7 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
                 raise ValueError(
                     f"Binary barcode generation failed for channel {channel + 1}: "
                     f"could only assign {assigned} barcodes to {num_genes_in_channel} genes. "
-                    f"Not enough distinct binary codes exist with {HYBRIDIZATIONS} imaging rounds "
+                    f"Unable to find a valid assignment after {MAX_RETRIES} attempts with {HYBRIDIZATIONS} imaging rounds "
                     f"and exactly {READS} ones to satisfy all constraints. "
                     f"Try increasing the number of imaging rounds or reducing the number of genes."
                 )
