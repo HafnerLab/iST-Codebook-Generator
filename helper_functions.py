@@ -521,9 +521,14 @@ def generate_hybridization_codebook(MODE, GENES, READS, HYBRIDIZATIONS, CHANNELS
                 if not pairwise_enforced:
                     return True
                 code_pos = active_positions(code)
+                seen_unions = set()
                 for existing in sel_codes:
-                    if frozenset(code_pos | active_positions(existing)) in p_set:
+                    pair_union = frozenset(code_pos | active_positions(existing))
+                    if pair_union in p_set:
                         return False
+                    if pair_union in seen_unions:
+                        return False
+                    seen_unions.add(pair_union)
                 return True
 
             def _register_pairs(code, sel_codes, p_set):
