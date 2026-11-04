@@ -133,11 +133,11 @@ def _build_merfish_to_order_idt(mouse_sequences_file, pattern_df):
     channel_prefixes = {1: '/5TYE665N/', 2: '/5Cy3/', 3: '/5Alex488N/'}
     rows = []
 
-    # Primers from MERFISH_primers sheet (col 0 = name, col 2 = sequence)
+    # Primers from MERFISH_primers sheet (col 0 = name, col 1 = Sequences)
     df_primers = pd.read_excel(mouse_sequences_file, sheet_name='MERFISH_primers', header=0)
     for _, row in df_primers.iterrows():
         name = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
-        seq = str(row.iloc[2]).strip() if pd.notna(row.iloc[2]) else ''
+        seq = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ''
         if name and seq and seq.lower() != 'nan':
             rows.append({'Name': name, 'Sequence': seq})
 
